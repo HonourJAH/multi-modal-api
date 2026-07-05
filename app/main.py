@@ -4,7 +4,7 @@ import httpx
 from fastapi import FastAPI, Form, File, UploadFile, HTTPException, Request, status
 
 from app.schemas import GenerateResponse
-from app.services.ollama_client import generate
+from app.services.ollama_client import generate, OLLAMA_BASE_URL
 
 
 @asynccontextmanager
@@ -61,5 +61,17 @@ async def generate_route(
 
 
 @app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
+async def health_check(request: Request):
+    ollama_reachable = True
+    try:
+        response = await request.app.state.http_client.get(
+            f"{OLLAMA_BASE_URL}/", timeout=3.0
+        )
+        response.raise_for_status()
+    except httpx.HTTPError:
+        ollama_reachable = False
+
+    return {
+        "status": "healthy",
+        "ollama_reachable": ollama_reachable,
+    }

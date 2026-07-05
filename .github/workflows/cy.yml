@@ -37,7 +37,7 @@ jobs:
         run: pytest -v
 
   docker-build:
-    name: Docker build validation
+    name: Docker build + boot check
     runs-on: ubuntu-latest
     needs: test
 
@@ -47,3 +47,32 @@ jobs:
 
       - name: Build image
         run: docker build -t multi-modal-api:ci .
+
+      - name: Start container
+        run: docker run -d --name multi-modal-api-ci -p 8000:8000 multi-modal-api:ci
+
+      - name: Wait for container to become healthy
+        run: |
+          for i in $(seq 1 15); do
+            if curl -sf http://localhost:8000/health; then
+              echo ""
+              echo "Container is up and responding"
+              exit 0
+            fi
+            echo "Waiting for container... (attempt $i/15)"
+            sleep 2
+          done
+          echo "Container did not respond within the timeout window"
+          exit 1
+
+      - name: Confirm health response shape
+        run: |
+          curl -sf http://localhost:8000/health | tee /dev/stderr | grep -q '"status":"healthy"'
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker logs multi-modal-api-ci
+
+      - name: Tear down
+        if: always()
+        run: docker rm -f multi-modal-api-ci || true

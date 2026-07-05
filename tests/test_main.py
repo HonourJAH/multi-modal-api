@@ -77,9 +77,7 @@ class TestGenerateEndpoint:
     def test_rejects_non_image_upload_with_400(self, client):
         files = {"image": ("notes.txt", b"just text", "text/plain")}
 
-        response = client.post(
-            "/generate", data={"prompt": "hello"}, files=files
-        )
+        response = client.post("/generate", data={"prompt": "hello"}, files=files)
 
         assert response.status_code == 400
         assert "must be an image" in response.json()["detail"]
@@ -87,9 +85,7 @@ class TestGenerateEndpoint:
     def test_rejects_upload_with_missing_content_type(self, client):
         files = {"image": ("mystery_file", b"some bytes", "")}
 
-        response = client.post(
-            "/generate", data={"prompt": "hello"}, files=files
-        )
+        response = client.post("/generate", data={"prompt": "hello"}, files=files)
 
         assert response.status_code == 400
 
@@ -131,10 +127,29 @@ class TestGenerateEndpoint:
 
 
 class TestHealthEndpoint:
-    def test_health_check_returns_200(self, client):
+    def test_health_check_returns_200_and_reports_status(self, client):
         response = client.get("/health")
         assert response.status_code == 200
-        assert response.json() == {"status": "healthy"}
+        body = response.json()
+        assert body["status"] == "healthy"
+        assert "ollama_reachable" in body
+
+    def test_health_check_reports_ollama_unreachable(self, client):
+        # No real Ollama in the test environment, so the shared http_client
+        # will genuinely fail to connect — confirms the check surfaces
+        # real connectivity state rather than always returning True.
+        response = client.get("/health")
+        assert response.json()["ollama_reachable"] is False
+
+    def test_health_check_reports_ollama_reachable_when_it_responds(self, client):
+        from unittest.mock import AsyncMock
+
+        fake_response = AsyncMock()
+        fake_response.raise_for_status = lambda: None
+        client.app.state.http_client.get = AsyncMock(return_value=fake_response)
+
+        response = client.get("/health")
+        assert response.json()["ollama_reachable"] is True
 
 
 class TestAppStateLifecycle:
